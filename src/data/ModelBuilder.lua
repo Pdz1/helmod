@@ -7,6 +7,20 @@ local ModelBuilder = {
 }
 
 -------------------------------------------------------------------------------
+---Check whether a factory can produce a recipe
+---@param recipe_prototype RecipePrototype
+---@param factory_name string
+---@return boolean
+function ModelBuilder.isFactoryAllowed(recipe_prototype, factory_name)
+    for _, factory in pairs(recipe_prototype:getAllowedMachines()) do
+        if factory.name == factory_name then
+            return true
+        end
+    end
+    return false
+end
+
+-------------------------------------------------------------------------------
 ---Add a recipe into production block
 ---@param model ModelData
 ---@param block BlockData
@@ -42,15 +56,7 @@ function ModelBuilder.addRecipeIntoProductionBlock(model, block, recipe_name, re
                 local default_factory = User.getDefaultFactory(ModelRecipe)
                 local is_match = false
                 if default_factory ~= nil then
-                    local factory_prototype = EntityPrototype(default_factory.name)
-                    local factory_categories = factory_prototype:getCraftingCategories()
-                    local recipe_categories = recipe_prototype:getAllCategories()
-                    for _, recipe_category in pairs(recipe_categories) do
-                        if factory_categories[recipe_category] then
-                            is_match = true
-                            break
-                        end
-                    end
+                    is_match = ModelBuilder.isFactoryAllowed(recipe_prototype, default_factory.name)
                     if is_match == true then
                         Model.setFactory(ModelRecipe, default_factory.name, default_factory.quality, default_factory.fuel, default_factory.fuel_quality)
                         ModelBuilder.setFactoryModulePriority(ModelRecipe, default_factory.module_priority)
@@ -520,31 +526,15 @@ end
 function ModelBuilder.setFactoryBlock(block, current_recipe)
     if current_recipe ~= nil then
         local default_factory_mode = User.getParameter("default_factory_mode")
-        local factory_prototype = EntityPrototype(current_recipe.factory.name)
-        local factory_categories = factory_prototype:getCraftingCategories()
-        local factory_ingredient_count = factory_prototype:getIngredientCount()
         for _, child in pairs(block.children) do
             if child.children == nil then -- not a block
                 local recipe = child
                 if recipe ~= current_recipe then
                     local prototype_recipe = RecipePrototype(recipe)
-                    local recipe_categories = prototype_recipe:getAllCategories()
-                    local recipe_ingredient_count = prototype_recipe:getIngredientCount()
-                    --- check ingredient limitation
-                    if factory_ingredient_count < recipe_ingredient_count then
-                        -- Skip
-                    elseif default_factory_mode ~= "category" or prototype_recipe:getCategory() == RecipePrototype(current_recipe):getCategory() then
-                        local is_match = false
-                        for _, recipe_category in pairs(recipe_categories) do
-                            if factory_categories[recipe_category] then
-                                is_match = true
-                                break
-                            end
-                        end
-                        if is_match == true then
-                            Model.setFactory(recipe, current_recipe.factory.name, current_recipe.factory.quality, current_recipe.factory.fuel)
-                            ModelBuilder.setFactoryModulePriority(recipe, current_recipe.factory.module_priority)
-                        end
+                    if (default_factory_mode ~= "category" or prototype_recipe:getCategory() == RecipePrototype(current_recipe):getCategory())
+                        and ModelBuilder.isFactoryAllowed(prototype_recipe, current_recipe.factory.name) then
+                        Model.setFactory(recipe, current_recipe.factory.name, current_recipe.factory.quality, current_recipe.factory.fuel)
+                        ModelBuilder.setFactoryModulePriority(recipe, current_recipe.factory.module_priority)
                     end
                 end
             end
